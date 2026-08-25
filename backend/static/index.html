@@ -1,0 +1,731 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BenefitIQ — Continuous Benefit Intelligence Platform</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+  <!-- React & ReactDOM CDN -->
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <!-- Babel Standalone -->
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace'],
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    body { font-family: 'Inter', sans-serif; background-color: #f8fafc; color: #0f172a; }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-900 antialiased selection:bg-blue-600 selection:text-white">
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect } = React;
+
+    function BenefitIQApp() {
+      const [view, setView] = useState('customer'); // 'customer' | 'issuer'
+      const [customers, setCustomers] = useState([]);
+      const [selectedId, setSelectedId] = useState(2); // Bob (Dining Heavy) default
+      const [customerData, setCustomerData] = useState(null);
+      const [issuerData, setIssuerData] = useState(null);
+      const [loading, setLoading] = useState(true);
+      const [error, setError] = useState(null);
+      const [redeemingId, setRedeemingId] = useState(null);
+      const [toastMessage, setToastMessage] = useState(null);
+
+      const API_BASE = '/api';
+
+      // Fetch customer list
+      useEffect(() => {
+        fetch(`${API_BASE}/customers`)
+          .then(res => {
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            return res.json();
+          })
+          .then(data => {
+            setCustomers(data);
+            if (data.length > 0 && !data.some(c => c.id === selectedId)) {
+              setSelectedId(data[0].id);
+            }
+          })
+          .catch(err => {
+            console.error("Error loading customers:", err);
+            setError("Could not load customers. Ensure backend server is running.");
+          });
+      }, []);
+
+      // Fetch customer dashboard
+      const loadCustomerDashboard = (id) => {
+        setLoading(true);
+        setError(null);
+        fetch(`${API_BASE}/customers/${id}/dashboard`)
+          .then(res => {
+            if (!res.ok) throw new Error(`Server returned status ${res.status}`);
+            return res.json();
+          })
+          .then(data => {
+            if (data && typeof data.unrealized_value === 'number') {
+              setCustomerData(data);
+            } else {
+              throw new Error("Invalid dashboard payload received.");
+            }
+            setLoading(false);
+          })
+          .catch(err => {
+            console.error("Error loading customer data:", err);
+            setError(err.message || "Failed to load customer profile");
+            setLoading(false);
+          });
+      };
+
+      // Fetch issuer analytics
+      const loadIssuerAnalytics = () => {
+        setLoading(true);
+        setError(null);
+        fetch(`${API_BASE}/issuer/analytics`)
+          .then(res => {
+            if (!res.ok) throw new Error(`Server returned status ${res.status}`);
+            return res.json();
+          })
+          .then(data => {
+            setIssuerData(data);
+            setLoading(false);
+          })
+          .catch(err => {
+            console.error("Error loading issuer analytics:", err);
+            setError(err.message || "Failed to load issuer analytics");
+            setLoading(false);
+          });
+      };
+
+      useEffect(() => {
+        if (view === 'customer') {
+          loadCustomerDashboard(selectedId);
+        } else {
+          loadIssuerAnalytics();
+        }
+      }, [view, selectedId]);
+
+      // Redeem simulation
+      const handleRedeem = (benefitId, benefitName) => {
+        setRedeemingId(benefitId);
+        fetch(`${API_BASE}/benefits/redeem`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ customer_id: selectedId, benefit_id: benefitId })
+        })
+        .then(res => {
+          if (!res.ok) throw new Error("Failed to process redemption");
+          return res.json();
+        })
+        .then(res => {
+          setRedeemingId(null);
+          setToastMessage(`✓ Redeemed $${(res.recovered || 0).toFixed(0)} for ${benefitName}!`);
+          setTimeout(() => setToastMessage(null), 4000);
+          loadCustomerDashboard(selectedId);
+        })
+        .catch(err => {
+          setRedeemingId(null);
+          alert('Redemption failed: ' + err.message);
+        });
+      };
+
+      return (
+        <div className="min-h-screen flex flex-col">
+          {/* Toast Notification */}
+          {toastMessage && (
+            <div className="fixed bottom-5 right-5 z-50 flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-3 text-white shadow-2xl border border-slate-700">
+              <span className="h-2 w-2 rounded-full bg-emerald-400"></span>
+              <span className="text-xs font-semibold">{toastMessage}</span>
+            </div>
+          )}
+
+          {/* Sticky Header */}
+          <header className="sticky top-0 z-40 w-full border-b border-slate-200 bg-white/90 backdrop-blur-md">
+            <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3 sm:px-6 lg:px-8">
+              {/* Logo & Lifecycle */}
+              <div className="flex items-center gap-6">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 text-white font-bold shadow-md shadow-blue-500/20">
+                    ⚡
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xl font-bold tracking-tight text-slate-900">Benefit<span className="text-blue-600">IQ</span></span>
+                      <span className="rounded bg-blue-50 px-1.5 py-0.5 text-[10px] font-bold text-blue-700 border border-blue-200 uppercase tracking-wider">Prototype</span>
+                    </div>
+                    <p className="text-xs text-slate-500 hidden sm:block">Continuous Benefit Intelligence Platform</p>
+                  </div>
+                </div>
+
+                {/* 5-Step Intelligence Cycle */}
+                <div className="hidden lg:flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-600">
+                  <span className="text-blue-600 font-bold">IDENTIFY</span>
+                  <span className="text-slate-300">→</span>
+                  <span className="text-indigo-600 font-bold">QUANTIFY</span>
+                  <span className="text-slate-300">→</span>
+                  <span className="text-purple-600 font-bold">ENGAGE</span>
+                  <span className="text-slate-300">→</span>
+                  <span className="text-emerald-600 font-bold">MEASURE</span>
+                  <span className="text-slate-300">→</span>
+                  <span className="text-amber-600 font-bold">LEARN</span>
+                </div>
+              </div>
+
+              {/* View Switcher & Persona Selector */}
+              <div className="flex items-center gap-3">
+                {view === 'customer' && customers.length > 0 && (
+                  <div className="flex items-center gap-2 bg-slate-100 p-1 rounded-lg border border-slate-200 text-xs">
+                    <span className="text-slate-500 font-medium pl-2 hidden md:inline">Persona:</span>
+                    <select
+                      value={selectedId}
+                      onChange={(e) => setSelectedId(Number(e.target.value))}
+                      className="bg-white text-slate-800 font-medium rounded-md px-2.5 py-1 text-xs border border-slate-200 focus:outline-none focus:ring-1 focus:ring-blue-600 cursor-pointer shadow-sm"
+                    >
+                      {customers.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                {/* Dual-Sided Mode Toggle */}
+                <div className="flex items-center rounded-xl bg-slate-100 p-1 border border-slate-200">
+                  <button
+                    onClick={() => setView('customer')}
+                    className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-all ${
+                      view === 'customer'
+                        ? 'bg-white text-blue-600 shadow-sm'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    👤 Card Member
+                  </button>
+                  <button
+                    onClick={() => setView('issuer')}
+                    className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-all ${
+                      view === 'issuer'
+                        ? 'bg-white text-blue-600 shadow-sm'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    🏢 Card Issuer
+                  </button>
+                </div>
+              </div>
+            </div>
+          </header>
+
+          {/* Main Body */}
+          <main className="flex-1 mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8 pt-8 pb-16">
+            {loading ? (
+              <div className="flex h-96 items-center justify-center">
+                <div className="flex flex-col items-center gap-3">
+                  <div className="h-8 w-8 animate-spin rounded-full border-4 border-blue-600 border-t-transparent" />
+                  <p className="text-xs font-medium text-slate-500">Querying Benefit Engine...</p>
+                </div>
+              </div>
+            ) : error ? (
+              <div className="rounded-2xl border border-red-200 bg-red-50 p-6 text-red-700">
+                <h3 className="font-bold text-base">Unable to connect to Intelligence Engine</h3>
+                <p className="text-xs mt-1">{error}</p>
+                <button
+                  onClick={() => view === 'customer' ? loadCustomerDashboard(selectedId) : loadIssuerAnalytics()}
+                  className="mt-4 rounded-lg bg-red-600 px-4 py-2 text-xs font-semibold text-white hover:bg-red-700"
+                >
+                  Retry Connection
+                </button>
+              </div>
+            ) : view === 'customer' && customerData ? (
+              /* ================= CUSTOMER VIEW ================= */
+              <div className="space-y-8">
+                {/* Persona Quick Chips */}
+                <div className="flex items-center gap-2 overflow-x-auto pb-1">
+                  <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider shrink-0 mr-1">Switch Persona:</span>
+                  {customers.map((c) => (
+                    <button
+                      key={c.id}
+                      onClick={() => setSelectedId(c.id)}
+                      className={`rounded-full px-3.5 py-1 text-xs font-medium transition-all whitespace-nowrap ${
+                        c.id === selectedId
+                          ? 'bg-blue-600 text-white shadow-sm font-semibold'
+                          : 'bg-white text-slate-700 border border-slate-200 hover:border-slate-300'
+                      }`}
+                    >
+                      {c.name}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Hero Metrics */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+                  {/* Unrealized Value (Hero) */}
+                  <div className="relative overflow-hidden rounded-2xl border border-blue-200 bg-gradient-to-br from-blue-900 via-slate-900 to-indigo-950 p-6 sm:p-8 text-white shadow-xl md:col-span-2">
+                    <div className="flex flex-col justify-between gap-6 sm:flex-row sm:items-center">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="rounded-full bg-blue-500/20 px-2.5 py-0.5 text-xs font-semibold text-blue-200 border border-blue-400/30">
+                            🛡️ Benefit Underutilization
+                          </span>
+                          <span className="text-xs text-slate-300">Welcome back, {customerData.name || 'Member'}</span>
+                        </div>
+                        
+                        <div className="mt-3 flex items-baseline gap-2">
+                          <span className="text-4xl sm:text-5xl font-extrabold tracking-tight text-white font-mono">
+                            ${(customerData.unrealized_value ?? 0).toFixed(0)}
+                          </span>
+                          <span className="text-sm font-medium text-blue-200">Unrealized Value</span>
+                        </div>
+
+                        <p className="mt-2 text-xs sm:text-sm text-slate-300 max-w-lg leading-relaxed">
+                          Eligible statement credits, airport lounge passes, and protection coverage currently active on your card that remain unclaimed.
+                        </p>
+                      </div>
+
+                      {/* Recovered Value Badge */}
+                      <div className="rounded-xl bg-white/10 p-4 backdrop-blur-md border border-white/10 shrink-0">
+                        <span className="text-xs text-slate-300 font-medium block">Value Recovered To Date</span>
+                        <div className="flex items-center gap-1.5 mt-1 font-mono">
+                          <span className="text-2xl font-bold text-emerald-300">
+                            +${(customerData.recovered_value ?? 0).toFixed(0)}
+                          </span>
+                        </div>
+                        <span className="text-[10px] text-slate-400 mt-1 block">Direct realized savings</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Benefit Health Score */}
+                  <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm flex flex-col justify-between">
+                    <div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">Benefit Health</span>
+                        <span className={`rounded-full px-2.5 py-0.5 text-xs font-bold ${
+                          (customerData.benefit_health_score ?? 0) >= 75
+                            ? 'bg-emerald-100 text-emerald-800'
+                            : (customerData.benefit_health_score ?? 0) >= 40
+                            ? 'bg-amber-100 text-amber-800'
+                            : 'bg-rose-100 text-rose-800'
+                        }`}>
+                          {(customerData.benefit_health_score ?? 0) >= 75 ? 'Optimal' : (customerData.benefit_health_score ?? 0) >= 40 ? 'Moderate' : 'Underutilized'}
+                        </span>
+                      </div>
+
+                      <div className="mt-4 flex items-baseline gap-2">
+                        <span className="text-4xl font-extrabold text-slate-900 font-mono">{customerData.benefit_health_score ?? 0}</span>
+                        <span className="text-sm text-slate-500">/ 100</span>
+                      </div>
+
+                      {/* Progress Bar */}
+                      <div className="mt-3 h-2 w-full rounded-full bg-slate-100 overflow-hidden">
+                        <div
+                          className={`h-full transition-all duration-500 ${
+                            (customerData.benefit_health_score ?? 0) >= 75
+                              ? 'bg-emerald-500'
+                              : (customerData.benefit_health_score ?? 0) >= 40
+                              ? 'bg-amber-500'
+                              : 'bg-rose-500'
+                          }`}
+                          style={{ width: `${customerData.benefit_health_score ?? 0}%` }}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="mt-4 rounded-lg bg-slate-50 p-2.5 text-xs text-slate-600 border border-slate-100">
+                      💡 Measures card membership value extraction efficiency. Higher score means fewer perks are wasted.
+                    </div>
+                  </div>
+                </div>
+
+                {/* Personalized Engagement Nudges */}
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="text-lg">⚡</span>
+                      <h3 className="font-bold text-lg text-slate-900">Personalized Engagement Opportunities</h3>
+                    </div>
+                    <span className="rounded-full bg-purple-100 text-purple-800 border border-purple-200 px-2.5 py-0.5 text-xs font-semibold">
+                      AI Opportunity Engine
+                    </span>
+                  </div>
+
+                  {customerData.recommendations && customerData.recommendations.length > 0 ? (
+                    <div className="rounded-2xl border border-blue-300 bg-gradient-to-r from-blue-50/90 via-indigo-50/50 to-white p-6 shadow-sm">
+                      <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+                        <div className="space-y-3 flex-1">
+                          <div className="flex items-center gap-2.5 flex-wrap">
+                            <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-white shadow-sm border border-slate-200 text-lg">
+                              🍽️
+                            </span>
+                            <span className="font-bold text-base text-slate-900">{customerData.recommendations[0].benefit_name}</span>
+                            <span className="rounded-full bg-blue-600 text-white px-2.5 py-0.5 text-xs font-bold">
+                              Opportunity Score: {Math.round(customerData.recommendations[0].opportunity_score)} / 100
+                            </span>
+                            <span className="rounded-full bg-amber-100 text-amber-800 border border-amber-200 px-2 py-0.5 text-[11px] font-semibold">
+                              Top Priority
+                            </span>
+                          </div>
+
+                          {/* Explainability Block */}
+                          <div className="rounded-xl bg-white/80 p-3.5 border border-blue-200/70 shadow-2xs">
+                            <span className="text-[11px] font-bold text-blue-950 uppercase tracking-wider block">Why this is recommended:</span>
+                            <p className="text-xs text-slate-700 font-medium mt-1 leading-relaxed">
+                              {customerData.recommendations[0].explanation}
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* CTA */}
+                        <button
+                          disabled={redeemingId === customerData.recommendations[0].benefit_id}
+                          onClick={() => handleRedeem(customerData.recommendations[0].benefit_id, customerData.recommendations[0].benefit_name)}
+                          className="w-full md:w-auto rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-semibold px-6 py-3 text-sm shadow-md shadow-blue-500/20 active:scale-[0.98] transition-transform"
+                        >
+                          {redeemingId === customerData.recommendations[0].benefit_id ? 'Simulating Redemption...' : 'Simulate Redemption →'}
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-6 text-emerald-900 flex items-center gap-3">
+                      <span className="text-2xl">🎉</span>
+                      <div>
+                        <h4 className="font-bold text-sm">All Benefits Fully Utilized</h4>
+                        <p className="text-xs text-emerald-700">No active unclaimed credits remain in this cycle.</p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Entitlements Grid */}
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="font-bold text-lg text-slate-900">Your Benefit Portfolio</h3>
+                      <p className="text-xs text-slate-500">Live tracker of entitled credits, limits, and expiration windows.</p>
+                    </div>
+                    <span className="text-xs font-medium text-slate-500">
+                      {(customerData.benefits || []).length} Total Enrolled Perks
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
+                    {(customerData.benefits || []).map((b) => {
+                      const isUsed = (b.remaining_value ?? 0) <= 0;
+                      return (
+                        <div
+                          key={b.id}
+                          className={`rounded-2xl border p-5 flex flex-col justify-between transition-all ${
+                            isUsed
+                              ? 'border-slate-200 bg-slate-50/60 opacity-80'
+                              : 'border-slate-200 bg-white hover:border-slate-300 shadow-sm'
+                          }`}
+                        >
+                          <div>
+                            <div className="flex items-start justify-between">
+                              <div>
+                                <h4 className="font-bold text-sm text-slate-900">{b.benefit.name}</h4>
+                                <span className="text-[11px] text-slate-500 capitalize">{b.benefit.category} • {b.benefit.frequency}</span>
+                              </div>
+                              <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                                isUsed ? 'bg-slate-100 text-slate-600' : 'bg-blue-100 text-blue-800'
+                              }`}>
+                                {isUsed ? 'Utilized' : 'Active'}
+                              </span>
+                            </div>
+
+                            {/* Progress */}
+                            <div className="mt-4 space-y-1">
+                              <div className="flex justify-between text-[11px] font-medium text-slate-500">
+                                <span>{b.benefit.type === 'visit' ? `${b.benefit.max_value - b.used_amount} visits left` : `$${(b.used_amount ?? 0).toFixed(0)} used`}</span>
+                                <span>{Math.round(((b.used_amount ?? 0) / (b.benefit.max_value || 1)) * 100)}%</span>
+                              </div>
+                              <div className="h-2 w-full rounded-full bg-slate-100 overflow-hidden">
+                                <div
+                                  className={`h-full ${isUsed ? 'bg-slate-400' : 'bg-blue-600'}`}
+                                  style={{ width: `${Math.min(100, ((b.used_amount ?? 0) / (b.benefit.max_value || 1)) * 100)}%` }}
+                                />
+                              </div>
+                            </div>
+
+                            {/* Value Box */}
+                            <div className="mt-4 rounded-xl bg-slate-50 p-3 border border-slate-100 flex justify-between items-center">
+                              <div>
+                                <span className="text-[10px] text-slate-500 uppercase tracking-wider block font-semibold">
+                                  {b.benefit.type === 'protection' ? 'Protection Value' : b.benefit.type === 'visit' ? 'Est. Value' : 'Unused Credit'}
+                                </span>
+                                <span className="text-base font-bold font-mono text-slate-900">
+                                  ${(b.remaining_value ?? 0).toFixed(0)}
+                                </span>
+                              </div>
+                              <div className="text-right">
+                                <span className="text-[10px] text-slate-500 uppercase tracking-wider block font-semibold">Cycle End</span>
+                                <span className="text-xs font-medium text-slate-700">
+                                  {new Date(b.expiry).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="mt-4">
+                            <button
+                              disabled={isUsed || redeemingId === b.benefit.id}
+                              onClick={() => handleRedeem(b.benefit.id, b.benefit.name)}
+                              className={`w-full rounded-lg py-2 text-xs font-semibold transition-all ${
+                                isUsed
+                                  ? 'border border-slate-200 text-slate-400 cursor-not-allowed'
+                                  : 'bg-blue-600 text-white hover:bg-blue-700 shadow-sm'
+                              }`}
+                            >
+                              {isUsed ? '✓ Fully Claimed' : redeemingId === b.benefit.id ? 'Claiming...' : `Redeem ($${(b.remaining_value ?? 0).toFixed(0)})`}
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Educational / Smart Tips */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                  <div className="rounded-2xl border border-slate-200 bg-white p-5">
+                    <div className="flex items-center gap-2 font-bold text-sm text-slate-900 mb-1">
+                      💡 Smart Timing Advisor
+                    </div>
+                    <p className="text-xs text-slate-600 leading-relaxed">
+                      Monthly credits (such as Dining and Streaming) reset on the 1st of each calendar month and do not roll over. Setting automated reminders guarantees maximum membership ROI.
+                    </p>
+                  </div>
+
+                  <div className="rounded-2xl border border-slate-200 bg-white p-5">
+                    <div className="flex items-center gap-2 font-bold text-sm text-slate-900 mb-1">
+                      🛡️ Purchase Protection Notice
+                    </div>
+                    <p className="text-xs text-slate-600 leading-relaxed">
+                      Qualifying retail purchases automatically receive 90-day damage and theft insurance up to $500 with zero enrollment fees.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ) : view === 'issuer' && issuerData ? (
+              /* ================= ISSUER VIEW ================= */
+              <div className="space-y-8">
+                <div className="border-b border-slate-200 pb-4 flex flex-col sm:flex-row justify-between sm:items-center gap-2">
+                  <div>
+                    <h2 className="text-2xl font-bold text-slate-900">Benefit Intelligence Center</h2>
+                    <p className="text-xs text-slate-500 mt-0.5">Card Issuer Portfolio Analytics & Underutilization Intelligence</p>
+                  </div>
+                  <span className="rounded-full bg-slate-100 text-slate-700 px-3 py-1 text-xs font-mono border border-slate-200">
+                    Portfolio Scale: 100,000 Cardholders (Simulated)
+                  </span>
+                </div>
+
+                {/* KPI Overview Cards */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+                  <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                    <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">Utilization Rate</span>
+                    <div className="mt-2 flex items-baseline gap-2 font-mono">
+                      <span className="text-3xl font-extrabold text-slate-900">{(issuerData.utilization_rate ?? 0).toFixed(1)}%</span>
+                      <span className="text-xs font-semibold text-emerald-600">▲ +3.4%</span>
+                    </div>
+                    <span className="text-[11px] text-slate-400 mt-1 block">Active benefits claimed</span>
+                  </div>
+
+                  <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                    <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">Recovery Rate</span>
+                    <div className="mt-2 flex items-baseline gap-2 font-mono">
+                      <span className="text-3xl font-extrabold text-emerald-600">{(issuerData.recovery_rate ?? 0).toFixed(1)}%</span>
+                      <span className="text-xs font-semibold text-emerald-600">▲ +12.1%</span>
+                    </div>
+                    <span className="text-[11px] text-slate-400 mt-1 block">Value recovered via nudges</span>
+                  </div>
+
+                  <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                    <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">Nudge Conversion</span>
+                    <div className="mt-2 flex items-baseline gap-2 font-mono">
+                      <span className="text-3xl font-extrabold text-slate-900">{(issuerData.recommendation_conversion ?? 0).toFixed(1)}%</span>
+                      <span className="text-xs font-semibold text-purple-600">High Uplift</span>
+                    </div>
+                    <span className="text-[11px] text-slate-400 mt-1 block">Nudges resulting in redemption</span>
+                  </div>
+
+                  <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                    <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">Benefit ROI</span>
+                    <div className="mt-2 flex items-baseline gap-2 font-mono">
+                      <span className="text-3xl font-extrabold text-slate-900">{(issuerData.benefit_roi ?? 0).toFixed(0)}%</span>
+                      <span className="text-xs text-slate-500 font-sans">Simulated</span>
+                    </div>
+                    <span className="text-[11px] text-slate-400 mt-1 block">Value vs operational investment</span>
+                  </div>
+                </div>
+
+                {/* Utilization & Campaign Details */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  {/* Utilization Breakdown */}
+                  <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                    <h3 className="font-bold text-sm text-slate-900 mb-1">Benefit Utilization by Category</h3>
+                    <p className="text-xs text-slate-500 mb-4">Activation percentage across card product benefits</p>
+                    <div className="space-y-4">
+                      {(issuerData.benefit_utilization || []).map((item, i) => (
+                        <div key={i} className="space-y-1">
+                          <div className="flex justify-between text-xs font-semibold">
+                            <span className="text-slate-800">{item.name}</span>
+                            <span className="font-mono text-blue-600">{(item.rate ?? 0).toFixed(0)}%</span>
+                          </div>
+                          <div className="h-2.5 w-full rounded-full bg-slate-100 overflow-hidden">
+                            <div
+                              className="h-full bg-gradient-to-r from-blue-600 to-indigo-600 rounded-full"
+                              style={{ width: `${item.rate ?? 0}%` }}
+                            />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Campaign Performance */}
+                  <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                    <h3 className="font-bold text-sm text-slate-900 mb-1">Nudge Campaign Conversion</h3>
+                    <p className="text-xs text-slate-500 mb-4">Redemption conversion rates by engagement trigger</p>
+                    <div className="space-y-3">
+                      {(issuerData.campaign_performance || []).map((c, i) => (
+                        <div key={i} className="rounded-xl bg-slate-50 p-3.5 border border-slate-100 flex justify-between items-center">
+                          <span className="text-xs font-semibold text-slate-900">{c.campaign}</span>
+                          <span className="text-xs font-bold text-blue-600 font-mono">{(c.conversion ?? 0).toFixed(1)}% Conversion</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Underutilized Table & Behavioral Segments */}
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                  <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm lg:col-span-2">
+                    <h3 className="font-bold text-sm text-slate-900 mb-1">High-Priority Underutilized Benefits</h3>
+                    <p className="text-xs text-slate-500 mb-4">Benefits with highest unrealized dollar exposure</p>
+                    <table className="w-full text-left text-xs">
+                      <thead>
+                        <tr className="border-b border-slate-200 text-slate-500 font-semibold uppercase tracking-wider">
+                          <th className="pb-2">Benefit</th>
+                          <th className="pb-2">Utilization</th>
+                          <th className="pb-2">Priority</th>
+                          <th className="pb-2 text-right">Unrealized Value (Scaled)</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {(issuerData.underutilized_benefits || []).map((u, i) => (
+                          <tr key={i} className="hover:bg-slate-50">
+                            <td className="py-3 font-semibold text-slate-900">{u.name}</td>
+                            <td className="py-3 text-slate-600">{(u.utilization ?? 0).toFixed(0)}%</td>
+                            <td className="py-3">
+                              <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                                u.priority === 'High' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'
+                              }`}>
+                                {u.priority}
+                              </span>
+                            </td>
+                            <td className="py-3 text-right font-mono font-bold text-slate-900">
+                              ${(u.unrealized_value ?? 0).toLocaleString()}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                    <h3 className="font-bold text-sm text-slate-900 mb-1">Member Segments</h3>
+                    <p className="text-xs text-slate-500 mb-4">Distribution by benefit activity</p>
+                    <div className="space-y-3">
+                      <div className="rounded-xl bg-emerald-50 p-3 border border-emerald-100">
+                        <div className="flex justify-between items-center">
+                          <span className="text-xs font-bold text-emerald-900">Highly Engaged</span>
+                          <span className="text-xs font-bold text-emerald-700">34%</span>
+                        </div>
+                        <p className="text-[11px] text-emerald-700 mt-1">Maximizing perk value.</p>
+                      </div>
+
+                      <div className="rounded-xl bg-amber-50 p-3 border border-amber-100">
+                        <div className="flex justify-between items-center">
+                          <span className="text-xs font-bold text-amber-900">Needs Attention</span>
+                          <span className="text-xs font-bold text-amber-700">48%</span>
+                        </div>
+                        <p className="text-[11px] text-amber-700 mt-1">Spending active but credits unredeemed.</p>
+                      </div>
+
+                      <div className="rounded-xl bg-slate-100 p-3 border border-slate-200">
+                        <div className="flex justify-between items-center">
+                          <span className="text-xs font-bold text-slate-900">Inactive / Discovery</span>
+                          <span className="text-xs font-bold text-slate-700">18%</span>
+                        </div>
+                        <p className="text-[11px] text-slate-600 mt-1">Zero redemptions logged.</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Recommended Issuer Actions */}
+                <div className="rounded-2xl border border-blue-200 bg-gradient-to-r from-blue-50/80 to-indigo-50/50 p-6">
+                  <h3 className="font-bold text-sm text-slate-900 mb-1">🚀 Recommended Issuer Actions</h3>
+                  <p className="text-xs text-slate-500 mb-4">Automated intelligence insights to boost overall portfolio ROI</p>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div className="rounded-xl bg-white p-4 border border-blue-100 shadow-2xs">
+                      <span className="text-xs font-bold text-blue-900">1. Boost Streaming Awareness</span>
+                      <p className="text-[11px] text-slate-600 mt-1">42% of subscribers have not activated their $20 credit. Trigger in-app partner banners.</p>
+                    </div>
+                    <div className="rounded-xl bg-white p-4 border border-blue-100 shadow-2xs">
+                      <span className="text-xs font-bold text-blue-900">2. Travel Timing Nudges</span>
+                      <p className="text-[11px] text-slate-600 mt-1">Deploy lounge reminders within 48h of flight booking to capture high intent.</p>
+                    </div>
+                    <div className="rounded-xl bg-white p-4 border border-blue-100 shadow-2xs">
+                      <span className="text-xs font-bold text-blue-900">3. End-of-Month Dining Push</span>
+                      <p className="text-[11px] text-slate-600 mt-1">Nudge dining cardholders 5 days prior to monthly credit expiration.</p>
+                    </div>
+                    <div className="rounded-xl bg-white p-4 border border-blue-100 shadow-2xs">
+                      <span className="text-xs font-bold text-blue-900">4. Retention Opportunity</span>
+                      <p className="text-[11px] text-slate-600 mt-1">Cardholders with &gt;$300 unrealized value exhibit 2x churn risk at renewal.</p>
+                    </div>
+                  </div>
+                </div>
+
+              </div>
+            ) : null}
+          </main>
+
+          {/* Footer */}
+          <footer className="border-t border-slate-200 bg-white py-6">
+            <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-500">
+              <div className="flex items-center gap-2">
+                <span className="font-bold text-slate-800">BenefitIQ</span>
+                <span>—</span>
+                <span>Continuous Benefit Intelligence & Underutilization Analytics</span>
+              </div>
+              <span className="rounded-full bg-slate-100 px-3 py-1 font-mono text-[11px] text-slate-600 border border-slate-200">
+                IDENTIFY → QUANTIFY → ENGAGE → MEASURE → LEARN
+              </span>
+            </div>
+          </footer>
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<BenefitIQApp />);
+  </script>
+</body>
+</html>
