@@ -12,7 +12,7 @@ class BenefitBase(BaseModel):
 class Benefit(BenefitBase):
     id: int
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 class CustomerBenefitBase(BaseModel):
     used_amount: float
@@ -24,7 +24,7 @@ class CustomerBenefitOut(CustomerBenefitBase):
     id: int
     benefit: Benefit
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 class RecommendationOut(BaseModel):
     benefit_id: int
